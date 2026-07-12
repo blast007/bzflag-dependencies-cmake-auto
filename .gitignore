@@ -1,0 +1,7 @@
+# Build directory
+build/
+
+# Output directories
+licenses/
+windows-*/
+macOS-*/
