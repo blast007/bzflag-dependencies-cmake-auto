@@ -10,8 +10,8 @@ set(CARES_HASH "SHA256=c222b6d681096f9444d2c4863d2c1174019e27cacca0a4a5c114d36dd
 set(PDCURSES_URL "https://github.com/wmcbrine/PDCurses/archive/refs/tags/3.9.tar.gz")
 set(PDCURSES_HASH "SHA256=590dbe0f5835f66992df096d3602d0271103f90cf8557a5d124f693c2b40d7ec")
 
-set(ZLIB_URL "https://www.zlib.net/zlib-1.3.2.tar.gz")
+set(ZLIB_URL "https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz")
 set(ZLIB_HASH "SHA256=bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16")
 
-set(CURL_URL "https://curl.se/download/curl-8.21.0.tar.gz")
+set(CURL_URL "https://github.com/curl/curl/releases/download/curl-8_21_0/curl-8.21.0.tar.gz")
 set(CURL_HASH "SHA256=d9b327997999045a24cda50f3983e69e51c516bd8be6ef9842fc7f99135e33bb")
