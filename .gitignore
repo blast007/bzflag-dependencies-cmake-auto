@@ -5,3 +5,6 @@ build/
 licenses/
 windows-*/
 macOS-*/
+
+# IDE directories
+.idea/
