@@ -1,0 +1,117 @@
+name: Update dependencies
+
+on:
+  #schedule:
+  #  # Run daily at 2 AM UTC
+  #  - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-deps:
+    runs-on: ubuntu-latest
+    #strategy:
+    #  matrix:
+    #    branch: ['master']
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ matrix.branch }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --quiet --upgrade pip
+          pip install --quiet packaging
+
+      - name: Check for dependency updates
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python .github/workflows/update-dependencies.py
+
+      #- name: Check if sources.cmake was modified
+      #  id: check-changes
+      #  run: |
+      #    if git diff --quiet sources.cmake; then
+      #      echo \"modified=false\" >> $GITHUB_OUTPUT
+      #    else
+      #      echo \"modified=true\" >> $GITHUB_OUTPUT
+      #    fi
+
+      - name: Create or update Pull Request
+        #if: steps.check-changes.outputs.modified == 'true'
+        if: ${{ hashFiles('dependency-updates.json') != '' }}
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const crypto = require("crypto");
+            
+            const updateBranchPrefix = 'automation/update-dependencies-';
+            
+            // Get the current branch
+            const baseBranch = context.ref.replace('refs/heads/', '');
+            if (!baseBranch) {
+              core.setFailed('Could not determine the target branch from context.refName.');
+              return;
+            }
+
+            // Load the machine-readable report (only the changed dependencies).
+            let updates = {};
+            try {
+              updates = JSON.parse(fs.readFileSync('dependency-updates.json', 'utf8'));
+            } catch {
+              // Fail if the file could not be read, as this definitely indicates some problem.
+              core.setFailed('Could not read dependency-updates.json');
+              return;
+            }
+            
+            // Fail if the file was found, but there were no updates. There should always be at least one update in the
+            // file if this script is running.
+            if (updates.length === 0) {
+              core.setFailed('No updates were found inside dependency-updates.json');
+              return;
+            }
+            
+            // Generate a hash based on the dependency updates
+            const update = ([name, info]) => `${info.github_repo}-${info.new_version}`;
+            const digest = crypto
+                .createHash("md5")
+                .update(
+                    Object.entries(updates).map(update).sort().join(","),
+                    "utf8",
+                )
+                .digest("hex")
+                .slice(0, 10);
+                        
+            // Define the update branch
+            const branchName = `${updateBranchPrefix}${digest}`;
+            
+            core.info(`Generated branch name is ${branchName}`);
+            
+            /*
+            // Fetch open PRs for the base branch
+            const pulls = await github.rest.pulls.list({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                base: baseBranch
+            });
+
+            // Find 
+            const existing = pulls.data.find(pr =>
+                pr.user.login === 'github-actions[bot]' &&
+                pr.head.ref.startsWith(updateBranchPrefix) // or match against a structured field
+            );
+            */

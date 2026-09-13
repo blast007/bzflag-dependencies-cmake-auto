@@ -8,3 +8,7 @@ macOS-*/
 
 # IDE directories
 .idea/
+
+# Workflow automation files
+dependency-updates.json
+.venv/
