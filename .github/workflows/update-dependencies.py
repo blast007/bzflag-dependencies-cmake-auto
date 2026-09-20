@@ -3,6 +3,8 @@ import hashlib
 import json
 import os
 import re
+import uuid
+import sys
 import urllib.request
 import urllib.error
 from pathlib import Path
@@ -36,6 +38,10 @@ class UpdateInfoJSONEncoder(json.JSONEncoder):
         return super().default(o)
 
 
+def s_if_not_one_len(data) -> str:
+    return f"{'s' if len(data) != 1 else ''}"
+
+
 def get_absolute_path(relative_path: str) -> Path | None:
     """Get an absolute path using a path relative to the root of the git repository."""
     if not hasattr(get_absolute_path, "base_path"):
@@ -48,6 +54,42 @@ def get_absolute_path(relative_path: str) -> Path | None:
             errors.append("Failed to find the git root")
             return None
     return get_absolute_path.base_path / relative_path
+
+
+def parse_sources_cmake(sources_path: Path) -> dict[str, AssetInfo] | None:
+    """Parse the contents of sources.cmake, returning any GitHub information."""
+    # Verify that the file exists
+    if not sources_path.exists():
+        errors.append("Error finding sources.cmake")
+        return None
+
+    # Build a regex to extract the parts of the GitHub URL and to extract the SHA256
+    source_re = re.compile(r'set\((\w+)_URL\s+\"(https://github.com/([^/]+/[^/]+)/.*/.*?(\d+(?:[._]\d+)+)[^\"]+)\"\)\nset\((\w+)_HASH\s+\"SHA256=([0-9a-fA-F]+)\"\)')
+
+    # Read the contents of the sources file
+    text = sources_path.read_text()
+
+    # Build up a list of dependencies and their URLs
+    sources: dict[str, AssetInfo] = {}
+    for match in source_re.finditer(text):
+        # Check that group 1 and group 4 match, which should both be the variable prefix (such as SDL)
+        if match.group(1) != match.group(5):
+            errors.append(f"Error parsing sources.cmake. Mismatched variable prefix ({match.group(1)} vs {match.group(5)})")
+            # Don't bother parsing any further
+            return None
+        sources[match.group(1)] = AssetInfo(
+            match.group(2), # URL
+            match.group(3), # org/repo
+            version.Version(match.group(4)), # version
+            match.group(6), # SHA256
+        )
+
+    if not sources:
+        errors.append("No sources found in sources.cmake")
+        return None
+
+    return sources
+
 
 def github_request(url: str) -> urllib.request.Request :
     """Convenient wrapper to create an urllib Request and add the GitHub token, if available."""
@@ -88,39 +130,42 @@ def get_github_latest_release(repo: str) -> dict | None:
         return None
 
 
-def parse_sources_cmake(sources_path: Path) -> dict[str, AssetInfo] | None:
-    """Parse the contents of sources.cmake, returning any GitHub information."""
-    # Verify that the file exists
-    if not sources_path.exists():
-        errors.append("Error finding sources.cmake")
-        return None
+def calculate_suffix_rank(name, suffix_ranks) -> int:
+    for rank, suffixes in enumerate(suffix_ranks):
+        if any(name.endswith(s) for s in suffixes):
+            return rank
+    return len(suffix_ranks)
 
-    # Build a regex to extract the parts of the GitHub URL and to extract the SHA256
-    source_re = re.compile(r'set\((\w+)_URL\s+\"(https://github.com/([^/]+/[^/]+)/.*/.*?(\d+(?:[._]\d+)+)[^\"]+)\"\)\nset\((\w+)_HASH\s+\"SHA256=([0-9a-fA-F]+)\"\)')
 
-    # Read the contents of the sources file
-    text = sources_path.read_text()
+def find_best_asset(assets):
+    asset_re = re.compile(r'.*?(\d+(?:[._]\d+)+)\.(?:tar\.gz|tgz|tar\.bz2|zip)$')
+    suffix_rank = (
+        ('.tar.gz', '.tgz'),  # first choice
+        ('.tar.bz2',),  # second choice
+        ('.zip',),  # third choice
+    )
 
-    # Build up a list of dependencies and their URLs
-    sources: dict[str, AssetInfo] = {}
-    for match in source_re.finditer(text):
-        # Check that group 1 and group 4 match, which should both be the variable prefix (such as SDL)
-        if match.group(1) != match.group(5):
-            errors.append(f"Error parsing sources.cmake. Mismatched variable prefix ({match.group(1)} vs {match.group(5)})")
-            # Don't bother parsing any further
-            return None
-        sources[match.group(1)] = AssetInfo(
-            match.group(2), # URL
-            match.group(3), # org/repo
-            version.Version(match.group(4)), # version
-            match.group(6), # SHA256
-        )
+    matches = []  # (rank, name, asset, version)
+    for asset in assets:
+        name = asset.get('name', '')
+        m = asset_re.search(name)
+        if m:
+            matches.append((calculate_suffix_rank(name, suffix_rank), name, asset, version.Version(m.group(1))))
 
-    if not sources:
-        errors.append("No sources found in sources.cmake")
-        return None
+    # Go through the asset matches, in order of rank, to find the best asset
+    for rank in range(len(suffix_rank)):
+        matches_at_rank = [a for a in matches if a[0] == rank]
 
-    return sources
+        # If we have one match, then this is the best one to use
+        if len(matches_at_rank) == 1:
+            # Return the asset and the version
+            return matches_at_rank[0][2], matches_at_rank[0][3]
+        # If we found more than one at the same rank, we cannot determine which is the best
+        elif len(matches_at_rank) > 1:
+            raise Exception("Multiple matching assets found, so it is not possible to determine the correct asset")
+
+    # We didn't find any matches
+    return None, None
 
 
 def download_sha256(url: str) -> str | None:
@@ -147,8 +192,6 @@ def check_updates() -> dict[str, UpdateInfo] | None:
 
     updates: dict[str, UpdateInfo] = {}
 
-    asset_re = re.compile(r'.*?(\d+(?:[._]\d+)+)\.(?:tar\.gz|tgz)$')
-
     # Loop through all the dependencies and check if we're on the latest version for each
     for dep_name, source in sources.items():
         # Get info about the latest release, with a special case for SDL2 so that we check for the latest SDL2 release
@@ -161,34 +204,32 @@ def check_updates() -> dict[str, UpdateInfo] | None:
             errors.append(f"{source.github_repo}: Failed to fetch release information")
             continue
 
-        latest_asset = None
+        latest_asset: UpdateInfo | None = None
 
         # If there are assets, check those for a .tar.gz or .tgz file
         assets = latest_release.get("assets", [])
         if assets:
-            for asset in latest_release.get("assets", []):
-                match = asset_re.match(asset['name'])
-                if match:
-                    # If we already found a .tar.gz or .tgz, fail out as this might mean we need
-                    # more advanced logic to match the right file.
-                    if latest_asset is not None:
-                        errors.append(f"{source.github_repo}: Multiple matching assets found, so it is not possible to determine the correct asset")
-                        continue
-
+            try:
+                # Try to find the best asset
+                best_asset, beset_asset_version = find_best_asset(assets)
+                if best_asset is not None:
                     # Ensure the digest is sha256
-                    digest = asset.get("digest") or ""
+                    digest = best_asset.get("digest") or ""
                     if not digest.startswith("sha256:"):
                         errors.append(f"{source.github_repo}: Asset does not have a sha256 hash")
                         continue
 
                     # Store a reference this as the latest asset
                     latest_asset = UpdateInfo(
-                        asset["browser_download_url"],
+                        best_asset["browser_download_url"],
                         source.github_repo,
                         source.version,
                         digest[len("sha256:"):],
-                        version.Version(match.group(1))
+                        beset_asset_version
                     )
+            except Exception as e:
+                errors.append(f"{source.github_repo}: {e}")
+                continue
 
             # If we went through all the assets and found one that is valid, check if it's newer
             if latest_asset is None:
@@ -201,10 +242,10 @@ def check_updates() -> dict[str, UpdateInfo] | None:
         # Otherwise, we'll use the GitHub generated source archives (currently only for PDCurses)
         else:
             # Extract the version number from the tag
-            tag_ver_re = re.compile(r'.*?(\d+(?:[._]\d+)+)')
+            tag_ver_re = re.compile(r'(\d+(?:[._]\d+)+)')
             match = re.match(tag_ver_re, latest_release["tag_name"])
             if match:
-                new_version = version.Version(match.group(1))
+                new_version = version.Version(match.group(1).replace("_", "."))
 
                 # Check if it's newer
                 if new_version > source.version:
@@ -259,15 +300,28 @@ def update_sources_cmake(updates: dict[str, UpdateInfo]):
     sources_path.write_text(contents)
 
 
-def dump_updates(updates: dict[str, UpdateInfo]) -> None:
-    """Dumps updates into an updates file."""
-    updates_path = get_absolute_path("dependency-updates.json")
-    if updates_path is None:
-        errors.append(f"{updates_path}: Failed to find location to write dependency-updates.json")
-        return
+def write_github_output(updates: dict[str, UpdateInfo]) -> None:
+    """Writes output variables for later GitHub Actions steps."""
 
-    with open(updates_path, "w") as f:
-        json.dump(updates, f, indent=2, cls=UpdateInfoJSONEncoder)
+    # Create a list of update information strings used for the commit and PR body
+    updates: list[str] = [f"{u.github_repo}: {u.version} → {u.new_version}" for u in updates.values()]
+
+    # Create a delimiter for multi-line values should be unique.
+    delimiter = f"EOF_{uuid.uuid4().hex}"
+
+    # Build the title and the body
+    title = f'Automatic update for {len(updates)} update{s_if_not_one_len(updates)}'
+    body = f'{"\n".join(updates)}'
+
+    # Write the output, falling back to stdout when not in a GitHub environment (for debugging)
+    if "GITHUB_OUTPUT" in os.environ:
+        fh = open(os.environ["GITHUB_OUTPUT"], "a")
+    else:
+        fh = sys.stdout
+
+    print(f'commit-message<<{delimiter}\n{title}\n{body}\n{delimiter}', file=fh)
+    print(f'pr-title={title}', file=fh)
+    print(f'pr-body<<{delimiter}\n{body}\n{delimiter}', file=fh)
 
 
 def main() -> int:
@@ -287,12 +341,12 @@ def main() -> int:
 
     # Update the files if we found any updates
     if updates:
-        print(f"\n::notice::Found {len(updates)} update{'s' if len(updates) > 1 else ''}!")
+        print(f"::notice::Found {len(updates)} update{s_if_not_one_len(updates)}!")
         for _, update in updates.items():
             print(f"::notice::{update.github_repo}: {update.version} → {update.new_version}")
         if not args.dry_run:
             update_sources_cmake(updates)
-            dump_updates(updates)
+            write_github_output(updates)
         else:
             print(f"::warning::Updates were found, but files were not updated in dry-run mode.")
     else:
