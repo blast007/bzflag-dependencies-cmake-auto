@@ -13,5 +13,5 @@ set(PDCURSES_HASH "SHA256=590dbe0f5835f66992df096d3602d0271103f90cf8557a5d124f69
 set(ZLIB_URL "https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz")
 set(ZLIB_HASH "SHA256=bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16")
 
-set(CURL_URL "https://github.com/curl/curl/releases/download/curl-8_21_0/curl-8.21.0.tar.gz")
-set(CURL_HASH "SHA256=d9b327997999045a24cda50f3983e69e51c516bd8be6ef9842fc7f99135e33bb")
+set(CURL_URL "https://github.com/curl/curl/releases/download/curl-8_22_0/curl-8.22.0.tar.gz")
+set(CURL_HASH "SHA256=d54dd598bf05927a726deb38df31c6a255ba83ff1de57c5d1464dac3ed8f44a1")
