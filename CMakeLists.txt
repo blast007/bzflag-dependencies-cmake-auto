@@ -119,7 +119,7 @@ if(MSVC)
 ##############################################################################
 # PDCurses
 ##############################################################################
-find_program(MAKE_EXE gmake nmake make REQUIRED PATHS ENV PATH)
+find_program(MAKE_EXE nmake REQUIRED PATHS ENV PATH)
 set(EP_PDCURSES "pdcurses")
 ExternalProject_Add(${EP_PDCURSES}
 	URL		${PDCURSES_URL}
