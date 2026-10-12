@@ -82,6 +82,22 @@ copy_license(${EP_GLEW} "LICENSE.txt")
 
 
 ##############################################################################
+# GLM
+##############################################################################
+set(EP_GLM "glm")
+ExternalProject_Add(${EP_GLM}
+	URL		${GLM_URL}
+	URL_HASH	${GLM_HASH}
+	PREFIX		${CMAKE_CURRENT_BINARY_DIR}/${EP_GLM}
+	CMAKE_ARGS	-DCMAKE_INSTALL_PREFIX=${CMAKE_SOURCE_DIR}/${OUTPUT_DIR}
+			-DCMAKE_OSX_ARCHITECTURES:STRING=arm64$<SEMICOLON>x86_64
+
+			-DGLM_BUILD_LIBRARY:BOOL=false
+)
+copy_license(${EP_GLM} "copying.txt")
+
+
+##############################################################################
 # c-ares
 ##############################################################################
 set(EP_CARES "c-ares")
@@ -97,7 +113,7 @@ ExternalProject_Add(${EP_CARES}
 copy_license(${EP_CARES} "LICENSE.md")
 
 
-# PDCurses, zlib, curl, and regex are only need to be built for Windows
+# PDCurses, zlib, curl, libpng, and regex are only need to be built for Windows
 if(MSVC)
 
 ##############################################################################
@@ -209,6 +225,35 @@ ExternalProject_Add(${EP_CURL}
 )
 copy_license(${EP_CURL} "COPYING")
 
+
+
+##############################################################################
+# libpng
+##############################################################################
+set(EP_LIBPNG "libpng")
+ExternalProject_Add(${EP_LIBPNG}
+	DEPENDS		${EP_ZLIB}
+	URL		${LIBPNG_URL}
+	URL_HASH	${LIBPNG_HASH}
+	PREFIX		${CMAKE_CURRENT_BINARY_DIR}/${EP_LIBPNG}
+	CMAKE_ARGS	-DCMAKE_INSTALL_PREFIX=${CMAKE_SOURCE_DIR}/${OUTPUT_DIR}
+			-DCMAKE_OSX_ARCHITECTURES:STRING=arm64$<SEMICOLON>x86_64
+
+            # libpng needs zlib
+			-DZLIB_INCLUDE_DIR:STRING=${CMAKE_SOURCE_DIR}/${OUTPUT_DIR}/include
+			-DZLIB_LIBRARY_DEBUG:STRING=${CMAKE_SOURCE_DIR}/${OUTPUT_DIR_DEBUG}/lib/zd.lib
+			-DZLIB_LIBRARY_RELEASE:STRING=${CMAKE_SOURCE_DIR}/${OUTPUT_DIR_RELEASE}/lib/z.lib
+
+			# Disable some unnecessary things
+			-DPNG_EXECUTABLES:BOOL=false
+			-DPNG_TOOLS:BOOL=false
+			-DPNG_STATIC:BOOL=false
+			-DPNG_TESTS:BOOL=false
+
+			# Check if macos needs this to be built at all, and if so, if we need it as a bundle
+			#-DPNG_FRAMEWORK:BOOL=true
+)
+copy_license(${EP_LIBPNG} "LICENSE")
 
 ##############################################################################
 # regex
