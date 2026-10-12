@@ -20,7 +20,7 @@ new feature is added to curl that we don't need, we could disable it.
 ## Roadmap
 
 GitHub Actions are currently being created to automate the workflows of this repository. The goals for now are:
-- [ ] Automatically detect updated dependencies and open a Pull Request to merge the updated `sources.cmake`
+- [X] Automatically detect updated dependencies and open a Pull Request to merge the updated `sources.cmake`
 - [ ] Automatically delete the `update-*` branch when the associated PR is merged or closed
 - [ ] Automatically run CI builds on push and PR
 - [ ] Automatically build and publish binary assets for Windows and macOS when a tag is created
