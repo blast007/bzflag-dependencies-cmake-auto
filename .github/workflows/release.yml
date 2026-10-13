@@ -1,10 +1,9 @@
-name: Build dependencies and publish a release
+name: Publish release
 
 on:
   push:
     tags:
-      - 'v*'
-  workflow_dispatch:
+      - '*'
 
 permissions:
   contents: write

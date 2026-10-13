@@ -1,9 +1,10 @@
 name: Update dependencies
 
 on:
-  #schedule:
-  #  # Run daily at 2 AM UTC
-  #  - cron: '0 2 * * *'
+  schedule:
+    # Run every day at 13:00 UTC
+    - cron: '0 13 * * *'
+  # Allow manual runs
   workflow_dispatch:
 
 permissions:
@@ -12,6 +13,7 @@ permissions:
 
 jobs:
   update-deps:
+    name: Update check
     runs-on: ubuntu-latest
     strategy:
       matrix:
