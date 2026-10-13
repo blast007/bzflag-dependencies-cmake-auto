@@ -15,6 +15,7 @@ on:
 
 jobs:
   build-windows:
+    name: Build Windows
     runs-on: windows-2022
     steps:
       - name: Checkout code
@@ -25,6 +26,7 @@ jobs:
         shell: cmd
 
   build-macos:
+    name: Build macOS
     runs-on: macos-latest
     steps:
       - name: Checkout code
